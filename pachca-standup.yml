@@ -1,0 +1,40 @@
+name: Pachca Standup Reminder
+
+on:
+  schedule:
+    # GitHub запускает по UTC. 9:55 МСК = 06:55 UTC.
+    - cron: "55 6 * * 1-5"
+  # Ручной запуск, чтобы протестировать сразу
+  workflow_dispatch:
+    inputs:
+      message:
+        description: "Текст сообщения"
+        required: false
+        default: "Встречаемся на дейли через 5 минут!"
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Проверка секрета
+        run: |
+          if [ -z "${{ secrets.PACHCA_WEBHOOK_URL }}" ]; then
+            echo "Secret PACHCA_WEBHOOK_URL не задан"; exit 1
+          fi
+
+      - name: Отправить уведомление в Пачку
+        env:
+          WEBHOOK_URL: ${{ secrets.PACHCA_WEBHOOK_URL }}
+          MSG_INPUT: ${{ github.event.inputs.message }}
+        run: |
+          MESSAGE="${MSG_INPUT:-⏰ Стендап! Встречаемся в 11:00 МСК. Погнали 🚀}"
+          # Безопасно соберём JSON (без внешних зависимостей)
+          ESCAPED_MESSAGE=$(python3 - <<'PY'
+import json, os
+print(json.dumps({"message": os.environ["MESSAGE"]}, ensure_ascii=False))
+PY
+)
+          curl --fail --show-error --silent \
+               -H "Content-Type: application/json" \
+               -X POST "$WEBHOOK_URL" \
+               -d "$ESCAPED_MESSAGE"
